@@ -38,9 +38,9 @@ type TektonRun struct {
 // ApplyTektonYAML applies the Tekton YAML file to the kubernetes cluster
 func ApplyTektonYAML(taskFilePath string) (string, error) {
 	cmd := exec.Command("kubectl", "apply", "-f", taskFilePath)
-	output, err := cmd.Output()
+	output, err := cmd.CombinedOutput()
 	if err != nil {
-		return "", fmt.Errorf("failed to apply Tekton YAML file: %v", err)
+		return string(output), fmt.Errorf("failed to apply Tekton YAML file: %v\n%s", err, output)
 	}
 	return string(output), nil
 }
