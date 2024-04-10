@@ -58,25 +58,17 @@ func WaitForTektonRunCompletion(ctx context.Context, tektonRunName, tektonRunKin
 	return nil
 }
 
-// GetTektonRuns extracts the Tekton TaskRun or PipelineRun from the output
-func GetTektonRuns(output string) ([]TektonRun, error) {
+// GetTektonRun extracts the Tekton TaskRun or PipelineRun from the output
+func GetTektonRun(output string) (TektonRun, error) {
 	re := regexp.MustCompile(tektonRunPattern)
-	matches := re.FindAllStringSubmatch(output, -1)
-
-	var tektonRuns []TektonRun
-	for _, match := range matches {
-		if len(match) > 2 {
-			kind := match[1]
-			name := match[2]
-			tektonRuns = append(tektonRuns, TektonRun{
-				Name: name,
-				Kind: kind,
-			})
-		}
+	match := re.FindStringSubmatch(output)
+	if len(match) > 2 {
+		kind := match[1]
+		name := match[2]
+		return TektonRun{
+			Name: name,
+			Kind: kind,
+		}, nil
 	}
-	if len(tektonRuns) == 0 {
-		return nil, fmt.Errorf("no TaskRun or PipelineRun found in the output")
-	}
-
-	return tektonRuns, nil
+	return TektonRun{}, fmt.Errorf("no Tekton TaskRun or PipelineRun found in the output")
 }
