@@ -72,3 +72,14 @@ func GetTektonRun(output string) (TektonRun, error) {
 	}
 	return TektonRun{}, fmt.Errorf("no Tekton TaskRun or PipelineRun found in the output")
 }
+
+// GetTektonRunYAML gets the YAML for the Tekton TaskRun or PipelineRun
+func GetTektonRunYAML(tektonRunName, tektonRunKind string) (string, error) {
+	resourceType := strings.ToLower(tektonRunKind) + "s"
+	cmd := exec.Command("kubectl", "get", fmt.Sprintf("%s/%s", resourceType, tektonRunName), "-o", "yaml")
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return string(output), fmt.Errorf("failed to get Tekton Run YAML: %v\n%s", err, output)
+	}
+	return string(output), nil
+}

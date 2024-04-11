@@ -19,6 +19,8 @@ import (
 	"fmt"
 	"os/exec"
 	"strings"
+
+	"github.com/gcb-catalog-testing-bot/catalog-infra/pkg/k8s"
 )
 
 // AddSuffixToFiles adds a suffix to the metadata.name field in the YAML files
@@ -103,4 +105,29 @@ func getMetadataName(filePath string) (string, error) {
 	}
 
 	return strings.TrimSpace(string(taskName)), nil
+}
+
+// ExtractFieldFromYAML extracts the field from the Tekton YAML using the yq query expression
+func ExtractFieldFromYAML(tektonYaml, yqQueryExpression string) (string, error) {
+	cmd := exec.Command(
+		"yq",
+		"eval",
+		yqQueryExpression,
+		"-",
+	)
+	cmd.Stdin = strings.NewReader(tektonYaml)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return "", fmt.Errorf("failed to extract field from Tekton YAML: %v\n%s", err, output)
+	}
+	return strings.TrimSpace(string(output)), nil
+}
+
+// ExtractFieldFromTektonRun extracts the field from the Tekton TaskRun or PipelineRun using the yq query expression
+func ExtractFieldFromTektonRun(tektonRunName, tektonRunKind, yqQueryExpression string) (string, error) {
+	tektonYaml, err := k8s.GetTektonRunYAML(tektonRunName, tektonRunKind)
+	if err != nil {
+		return "", err
+	}
+	return ExtractFieldFromYAML(tektonYaml, yqQueryExpression)
 }

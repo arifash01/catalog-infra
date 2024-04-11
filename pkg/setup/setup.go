@@ -19,8 +19,8 @@ import (
 	"fmt"
 	"math/rand"
 	"os"
+	"os/exec"
 	"path/filepath"
-	"testing"
 	"time"
 
 	"github.com/gcb-catalog-testing-bot/catalog-infra/pkg/tekton"
@@ -120,6 +120,19 @@ func AddSuffixToFiles(srcDir, suffix string) error {
 	return nil
 }
 
-// TODO: wrap the setup steps into a function
-func SetupIntegrationTest(m *testing.M) {
+// SetupKubectlConfig sets up the kubectl configuration for the specified GKE cluster
+func SetupKubectlConfig(projectID, clusterName, region string) error {
+	// Set the project ID in gcloud config
+	cmd := exec.Command("gcloud", "config", "set", "project", projectID)
+	if output, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("failed to set project ID in gcloud config: %v, output: %s", err, output)
+	}
+
+	// Get the credentials for the GKE cluster
+	cmd = exec.Command("gcloud", "container", "clusters", "get-credentials", clusterName, "--region", region)
+	if output, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("failed to get credentials for the GKE cluster: %v, output: %s", err, output)
+	}
+
+	return nil
 }
