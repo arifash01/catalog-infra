@@ -21,6 +21,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/gcb-catalog-testing-bot/catalog-infra/pkg/tekton"
@@ -103,6 +104,7 @@ func AddSuffixToFiles(srcDir, suffix string) error {
 	if err != nil {
 		return err
 	}
+	stepActionName := strings.TrimSuffix(filepath.Base(stepActionFile), ".yaml")
 	if err := tekton.UpdateMetadataName(stepActionFile, suffix); err != nil {
 		return err
 	}
@@ -112,7 +114,7 @@ func AddSuffixToFiles(srcDir, suffix string) error {
 		return err
 	}
 	for _, testFilePath := range testFilePaths {
-		if err := tekton.UpdateTestFile(testFilePath, filepath.Base(srcDir), suffix); err != nil {
+		if err := tekton.UpdateTestFile(testFilePath, stepActionName, suffix); err != nil {
 			return err
 		}
 	}

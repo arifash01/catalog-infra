@@ -21,9 +21,9 @@ import (
 	"github.com/gcb-catalog-testing-bot/catalog-infra/pkg/tekton"
 )
 
-// AssertFieldNotEmpty asserts that a field in the Tekton TaskRun or PipelineRun is not empty
-func AssertFieldNotEmpty(tektonRunName, tektonRunKind, yqQueryExpression string) error {
-	field, err := tekton.ExtractFieldFromTektonRun(tektonRunName, tektonRunKind, yqQueryExpression)
+// AssertTektonRunFieldNotEmpty asserts that a field in the Tekton TaskRun or PipelineRun is not empty
+func AssertTektonRunFieldNotEmpty(tektonRunName, tektonRunKind, yqQueryExpression, namespace string) error {
+	field, err := tekton.ExtractFieldFromTektonRun(tektonRunName, tektonRunKind, yqQueryExpression, namespace)
 	if err != nil {
 		return err
 	}
@@ -33,9 +33,9 @@ func AssertFieldNotEmpty(tektonRunName, tektonRunKind, yqQueryExpression string)
 	return nil
 }
 
-// AssertFieldEquals asserts that a field in the Tekton TaskRun or PipelineRun equals the expected value
-func AssertFieldEquals(tektonRunName, tektonRunKind, yqQueryExpression, expected string) error {
-	field, err := tekton.ExtractFieldFromTektonRun(tektonRunName, tektonRunKind, yqQueryExpression)
+// AssertTektonRunFieldEquals asserts that a field in the Tekton TaskRun or PipelineRun equals the expected value
+func AssertTektonRunFieldEquals(tektonRunName, tektonRunKind, yqQueryExpression, expected, namespace string) error {
+	field, err := tekton.ExtractFieldFromTektonRun(tektonRunName, tektonRunKind, yqQueryExpression, namespace)
 	if err != nil {
 		return err
 	}

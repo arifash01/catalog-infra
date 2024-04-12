@@ -124,8 +124,8 @@ func ExtractFieldFromYAML(tektonYaml, yqQueryExpression string) (string, error) 
 }
 
 // ExtractFieldFromTektonRun extracts the field from the Tekton TaskRun or PipelineRun using the yq query expression
-func ExtractFieldFromTektonRun(tektonRunName, tektonRunKind, yqQueryExpression string) (string, error) {
-	tektonYaml, err := k8s.GetTektonRunYAML(tektonRunName, tektonRunKind)
+func ExtractFieldFromTektonRun(tektonRunName, tektonRunKind, yqQueryExpression, namespace string) (string, error) {
+	tektonYaml, err := k8s.GetTektonRunYAML(tektonRunName, tektonRunKind, namespace)
 	if err != nil {
 		return "", err
 	}
