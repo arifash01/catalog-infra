@@ -58,19 +58,37 @@ func WaitForTektonRunCompletion(ctx context.Context, tektonRunName, tektonRunKin
 	return nil
 }
 
-// GetTektonRun extracts the Tekton TaskRun or PipelineRun from the output
+// GetTektonRun extracts a single Tekton TaskRun or PipelineRun from the output
 func GetTektonRun(output string) (TektonRun, error) {
-	re := regexp.MustCompile(tektonRunPattern)
-	match := re.FindStringSubmatch(output)
-	if len(match) > 2 {
-		kind := match[1]
-		name := match[2]
-		return TektonRun{
-			Name: name,
-			Kind: kind,
-		}, nil
+	runs, err := GetTektonRuns(output)
+	if err != nil {
+		return TektonRun{}, err
 	}
-	return TektonRun{}, fmt.Errorf("no Tekton TaskRun or PipelineRun found in the output")
+	if len(runs) == 0 {
+		return TektonRun{}, fmt.Errorf("no Tekton TaskRun or PipelineRun found in the output")
+	}
+	return runs[0], nil
+}
+
+// GetTektonRuns extracts multiple Tekton TaskRun or PipelineRun from the output
+func GetTektonRuns(output string) ([]TektonRun, error) {
+	re := regexp.MustCompile(tektonRunPattern)
+	matches := re.FindAllStringSubmatch(output, -1)
+	if len(matches) == 0 {
+		return nil, fmt.Errorf("no TaskRun or PipelineRun found in the output")
+	}
+
+	var tektonRuns []TektonRun
+	for _, match := range matches {
+		if len(match) > 2 {
+			tektonRuns = append(tektonRuns, TektonRun{
+				Name: match[2],
+				Kind: match[1],
+			})
+		}
+	}
+
+	return tektonRuns, nil
 }
 
 // GetTektonRunYAML gets the YAML for the Tekton TaskRun or PipelineRun
