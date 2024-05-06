@@ -1,4 +1,5 @@
 #!/bin/bash
+
 set -ux
 
 project=gcb-catalog-testing
@@ -25,8 +26,6 @@ exit_code=$?
 
 # Kill ssh sessions
 pkill ssh
-
-# TODO delete VM
 
 # Check if the process exited successfully (exit code 0)
 if [[ $exit_code -eq 0 ]]; then
