@@ -1,6 +1,6 @@
 #!/bin/bash
 
-set -ux
+set -eux
 
 project=gcb-catalog-testing
 zone=us-central1-a
@@ -19,10 +19,11 @@ kubectl config set-credentials cloudbuild --client-certificate=/tmp/cloudbuild/c
 kubectl config set-context minikube --cluster=minikube --user=cloudbuild
 kubectl config use-context minikube
 
-# Run tests
+# Run tests (capturing exit code if tests fail to cleanup properly)
+set +e
 go test -v --timeout 30m ./...
-# Capture the exit code
 exit_code=$?
+set -e
 
 # Kill ssh sessions
 pkill ssh
