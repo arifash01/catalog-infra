@@ -17,13 +17,14 @@ package assert
 
 import (
 	"fmt"
+	"strings"
 
-	"github.com/gcb-catalog-testing-bot/catalog-infra/pkg/tekton"
+	"github.com/gcb-catalog-testing-bot/catalog-infra/pkg/resourcemanager"
 )
 
 // AssertTektonRunFieldNotEmpty asserts that a field in the Tekton TaskRun or PipelineRun is not empty
 func AssertTektonRunFieldNotEmpty(tektonRunName, tektonRunKind, yqQueryExpression, namespace string) error {
-	field, err := tekton.ExtractFieldFromTektonRun(tektonRunName, tektonRunKind, yqQueryExpression, namespace)
+	field, err := resourcemanager.ExtractFieldFromTektonRun(tektonRunName, tektonRunKind, yqQueryExpression, namespace)
 	if err != nil {
 		return err
 	}
@@ -35,7 +36,7 @@ func AssertTektonRunFieldNotEmpty(tektonRunName, tektonRunKind, yqQueryExpressio
 
 // AssertTektonRunFieldEquals asserts that a field in the Tekton TaskRun or PipelineRun equals the expected value
 func AssertTektonRunFieldEquals(tektonRunName, tektonRunKind, yqQueryExpression, expected, namespace string) error {
-	field, err := tekton.ExtractFieldFromTektonRun(tektonRunName, tektonRunKind, yqQueryExpression, namespace)
+	field, err := resourcemanager.ExtractFieldFromTektonRun(tektonRunName, tektonRunKind, yqQueryExpression, namespace)
 	if err != nil {
 		return err
 	}
@@ -43,4 +44,27 @@ func AssertTektonRunFieldEquals(tektonRunName, tektonRunKind, yqQueryExpression,
 		return fmt.Errorf("field '%s' does not equal '%s'", yqQueryExpression, expected)
 	}
 	return nil
+}
+
+// AssertProvenanceNotEmpty asserts that the provenance field in the Tekton TaskRun or PipelineRun is not empty
+func AssertProvenanceNotEmpty(tektonRunName, tektonRunKind, namespace string) error {
+	return AssertTektonRunFieldNotEmpty(tektonRunName, tektonRunKind, `.status.provenance`, namespace)
+}
+
+// AssertResultsNotEmpty asserts that the results field in the Tekton TaskRun or PipelineRun is not empty
+func AssertResultsNotEmpty(tektonRunName, taskRunKind, resultName, namespace string) error {
+	queryExpression := fmt.Sprintf(`.status.steps[] | select(.results[].name == "%s") | .results[].value`, resultName)
+	output, err := resourcemanager.ExtractFieldFromTektonRun(tektonRunName, taskRunKind, queryExpression, namespace)
+	if err != nil {
+		return fmt.Errorf("failed to extract results using query '%s': %w", queryExpression, err)
+	}
+
+	results := strings.Split(output, "\n")
+	for _, result := range results {
+		if result != "" {
+			return nil
+		}
+	}
+
+	return fmt.Errorf("no results with name '%s' have a non-empty value", resultName)
 }

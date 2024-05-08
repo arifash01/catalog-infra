@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package k8s provides utility functions for working with kubectl commands.
-package k8s
+// Package resourcemanager provides utility functions for managing resources in the testing cluster.
+package resourcemanager
 
 import (
 	"context"
@@ -29,20 +29,24 @@ const (
 	tektonRunPattern    = `(?m)^(taskrun|pipelinerun)\.tekton\.dev/(\S+)\s+created$`
 )
 
-// TektonRun represents a Tekton TaskRun or PipelineRun
-type TektonRun struct {
-	Name string
-	Kind string
-}
-
-// ApplyTektonYAML applies the Tekton YAML file to the kubernetes cluster
-func ApplyTektonYAML(taskFilePath, namespace string) (string, error) {
-	cmd := exec.Command("kubectl", "apply", "-f", taskFilePath, "-n", namespace)
+// ApplyStepActionYAML applies the Tekton StepAction YAML file to the kubernetes cluster
+func ApplyStepActionYAML(stepActionFilePath, namespace string) error {
+	cmd := exec.Command("kubectl", "apply", "-f", stepActionFilePath, "-n", namespace)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		return string(output), fmt.Errorf("failed to apply Tekton YAML file: %v\n%s", err, output)
+		return fmt.Errorf("failed to apply Tekton YAML file: %v\n%s", err, output)
 	}
-	return string(output), nil
+	return nil
+}
+
+// ApplyTestYAML applies the Test YAML file to the kubernetes cluster
+func ApplyTestYAML(testFilePath, namespace string) (TektonRun, error) {
+	cmd := exec.Command("kubectl", "apply", "-f", testFilePath, "-n", namespace)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return TektonRun{}, fmt.Errorf("failed to apply Test YAML file: %v\n%s", err, output)
+	}
+	return getTektonRun(string(output))
 }
 
 // WaitForTektonRunCompletion waits for the Tekton TaskRun or PipelineRun to complete with the expected condition
@@ -58,37 +62,21 @@ func WaitForTektonRunCompletion(ctx context.Context, tektonRunName, tektonRunKin
 	return nil
 }
 
-// GetTektonRun extracts a single Tekton TaskRun or PipelineRun from the output
-func GetTektonRun(output string) (TektonRun, error) {
-	runs, err := GetTektonRuns(output)
-	if err != nil {
-		return TektonRun{}, err
-	}
-	if len(runs) == 0 {
-		return TektonRun{}, fmt.Errorf("no Tekton TaskRun or PipelineRun found in the output")
-	}
-	return runs[0], nil
-}
-
-// GetTektonRuns extracts multiple Tekton TaskRun or PipelineRun from the output
-func GetTektonRuns(output string) ([]TektonRun, error) {
+// getTektonRun extracts a single Tekton TaskRun or PipelineRun from the output
+func getTektonRun(output string) (TektonRun, error) {
 	re := regexp.MustCompile(tektonRunPattern)
 	matches := re.FindAllStringSubmatch(output, -1)
 	if len(matches) == 0 {
-		return nil, fmt.Errorf("no TaskRun or PipelineRun found in the output")
+		return TektonRun{}, fmt.Errorf("no TaskRun or PipelineRun found in the output")
 	}
+	if len(matches[0]) > 2 {
+		return TektonRun{
+			Name: matches[0][2],
+			Kind: matches[0][1],
+		}, nil
 
-	var tektonRuns []TektonRun
-	for _, match := range matches {
-		if len(match) > 2 {
-			tektonRuns = append(tektonRuns, TektonRun{
-				Name: match[2],
-				Kind: match[1],
-			})
-		}
 	}
-
-	return tektonRuns, nil
+	return TektonRun{}, fmt.Errorf("no TaskRun or PipelineRun found in the output")
 }
 
 // GetTektonRunYAML gets the YAML for the Tekton TaskRun or PipelineRun

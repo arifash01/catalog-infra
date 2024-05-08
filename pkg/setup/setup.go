@@ -17,124 +17,41 @@ package setup
 
 import (
 	"fmt"
-	"math/rand"
 	"os"
-	"os/exec"
-	"path/filepath"
-	"strings"
-	"time"
 
-	"github.com/gcb-catalog-testing-bot/catalog-infra/pkg/tekton"
+	"github.com/gcb-catalog-testing-bot/catalog-infra/pkg/resourcemanager"
+	"github.com/google/uuid"
 )
 
-// CopyStepActionFiles copies the action and test files from the source directory to the destination directory
-func CopyStepActionFiles(srcDir, dstDir string) error {
-	srcStepActionFile, err := GetStepActionFile(srcDir)
+// SetupTestEnvironment sets up a test environment and return the cleanup function to be called after the tests
+func SetupTestEnvironment(tektonYAMLPath string) (string, func(), error) {
+	fmt.Println("Setting up tests...")
+
+	// Create a temporary namespace for testing
+	namespace := uuid.New().String()
+	output, err := resourcemanager.CreateTestNamespace(namespace)
 	if err != nil {
-		return err
+		return "", nil, fmt.Errorf("failed to create namespace: %v\n%s", err, output)
 	}
-	dstStepActionFile := filepath.Join(dstDir, filepath.Base(srcStepActionFile))
-	if err := copyFile(srcStepActionFile, dstStepActionFile); err != nil {
-		return err
+	fmt.Printf("Using namespace: %s\n", namespace)
+
+	// Cleanup function
+	cleanup := func() {
+		fmt.Println("Tearing down tests...")
+		resourcemanager.DeleteNamespaceAndResources(namespace)
 	}
 
-	srcTestsDir := filepath.Join(srcDir, "tests")
-	if _, err := os.Stat(srcTestsDir); !os.IsNotExist(err) {
-		dstTestsDir := filepath.Join(dstDir, "tests")
-		if err := os.MkdirAll(dstTestsDir, 0755); err != nil {
-			return err
-		}
-		srcTestFiles, err := filepath.Glob(filepath.Join(srcTestsDir, "*.yaml"))
-		if err != nil {
-			return err
-		}
-		for _, srcTestFile := range srcTestFiles {
-			dstTestFile := filepath.Join(dstTestsDir, filepath.Base(srcTestFile))
-			if err := copyFile(srcTestFile, dstTestFile); err != nil {
-				return err
-			}
-		}
+	// Apply StepAction YAML
+	if err = resourcemanager.ApplyStepActionYAML(tektonYAMLPath, namespace); err != nil {
+		cleanup()
+		return "", nil, fmt.Errorf("failed to apply Tekton YAML: %v\n%s", err, output)
 	}
 
-	return nil
+	return namespace, cleanup, nil
 }
 
-// GetStepActionFile returns the path to the step action file in the source directory
-func GetStepActionFile(srcDir string) (string, error) {
-	srcStepActionFiles, err := filepath.Glob(filepath.Join(srcDir, "*.yaml"))
-	if err != nil {
-		return "", err
-	}
-	if len(srcStepActionFiles) == 0 {
-		return "", fmt.Errorf("no YAML file found in %s", srcDir)
-	}
-	if len(srcStepActionFiles) > 1 {
-		return "", fmt.Errorf("multiple YAML files found in %s", srcDir)
-	}
-	return srcStepActionFiles[0], nil
-}
-
-func copyFile(src, dst string) error {
-	srcData, err := os.ReadFile(src)
-	if err != nil {
-		return err
-	}
-
-	if err = os.WriteFile(dst, srcData, 0644); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-// GenerateRandomSuffix generates a random suffix, e.g. "abc12"
-func GenerateRandomSuffix() string {
-	rand := rand.New(rand.NewSource(time.Now().UnixNano()))
-	const charset = "abcdefghijklmnopqrstuvwxyz0123456789"
-	suffix := make([]byte, 5)
-	for i := range suffix {
-		suffix[i] = charset[rand.Intn(len(charset))]
-	}
-	return string(suffix)
-}
-
-// AddSuffixToFiles adds a suffix to the stepaction and test files in the given directory
-func AddSuffixToFiles(srcDir, suffix string) error {
-	stepActionFile, err := GetStepActionFile(srcDir)
-	if err != nil {
-		return err
-	}
-	stepActionName := strings.TrimSuffix(filepath.Base(stepActionFile), ".yaml")
-	if err := tekton.UpdateMetadataName(stepActionFile, suffix); err != nil {
-		return err
-	}
-
-	testFilePaths, err := filepath.Glob(filepath.Join(srcDir, "tests", "*.yaml"))
-	if err != nil {
-		return err
-	}
-	for _, testFilePath := range testFilePaths {
-		if err := tekton.UpdateTestFile(testFilePath, stepActionName, suffix); err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-// SetupKubectlConfig sets up the kubectl configuration for the specified GKE cluster
-func SetupKubectlConfig(projectID, clusterName, region string) error {
-	// Set the project ID in gcloud config
-	cmd := exec.Command("gcloud", "config", "set", "project", projectID)
-	if output, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("failed to set project ID in gcloud config: %v, output: %s", err, output)
-	}
-
-	// Get the credentials for the GKE cluster
-	cmd = exec.Command("gcloud", "container", "clusters", "get-credentials", clusterName, "--region", region)
-	if output, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("failed to get credentials for the GKE cluster: %v, output: %s", err, output)
-	}
-
-	return nil
+// ExitWithCleanup calls the cleanup function and exits the program with the given exit code.
+func ExitWithCleanup(cleanup func(), exitCode int) {
+	cleanup()
+	os.Exit(exitCode)
 }
