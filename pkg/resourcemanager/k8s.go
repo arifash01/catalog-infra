@@ -22,6 +22,7 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+	"time"
 
 	v1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
 	"github.com/tektoncd/pipeline/pkg/client/clientset/versioned"
@@ -65,12 +66,14 @@ func ApplyTestYAML(t *testing.T, testFilePath, namespace string) TektonRun {
 	return tektonRun
 }
 
-// WaitForTektonRunCompletion waits for the Tekton TaskRun or PipelineRun to complete with the expected condition
-func WaitForTektonRunCompletion(t *testing.T, tektonClient *versioned.Clientset, tektonRun TektonRun, watchTimeoutMinutes int, expectedCondition, namespace string) {
+// WaitForTektonRunCompletion waits for the Tekton TaskRun or PipelineRun to complete with the expected condition within the timeout
+func WaitForTektonRunCompletion(t *testing.T, tektonClient *versioned.Clientset, tektonRun TektonRun, watchTimeout time.Duration, expectedCondition, namespace string) {
 	t.Helper()
 	var watcher watch.Interface
 	var err error
-	timeoutSeconds := int64(watchTimeoutMinutes * 60)
+
+	// Calculate timeout in seconds
+	timeoutSeconds := int64(watchTimeout.Seconds())
 
 	switch strings.ToLower(tektonRun.Kind) {
 	case "taskrun":
@@ -112,7 +115,7 @@ func WaitForTektonRunCompletion(t *testing.T, tektonClient *versioned.Clientset,
 		}
 	}
 
-	t.Fatalf("watch timed out after %d minutes", watchTimeoutMinutes)
+	t.Fatalf("watch timed out after %v", watchTimeout)
 }
 
 // meetExpectedCondition checks if the Tekton TaskRun or PipelineRun meets the expected condition
