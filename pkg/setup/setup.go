@@ -56,8 +56,8 @@ func SetupTest(t *testing.T, tektonYAMLPath string) (string, func()) {
 	return namespace, cleanup
 }
 
-// InitK8sClient initializes a k8s client and a Tekton client.
-func InitK8sClient(t *testing.T, kubeConfigPath ...string) (*kubernetes.Clientset, *versioned.Clientset) {
+// InitK8sClients initializes a k8s client and a Tekton client.
+func InitK8sClients(t *testing.T, kubeConfigPath ...string) (*kubernetes.Clientset, *versioned.Clientset) {
 	t.Helper()
 	var kubeConfig string
 	// Check if a custom kubeConfigPath was provided
