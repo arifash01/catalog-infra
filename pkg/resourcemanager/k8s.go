@@ -21,13 +21,24 @@ import (
 	"os/exec"
 	"regexp"
 	"strings"
-	"time"
+	"testing"
+
+	v1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
+	"github.com/tektoncd/pipeline/pkg/client/clientset/versioned"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/watch"
+	"knative.dev/pkg/apis"
 )
 
 const (
-	watchTimeoutMinutes = 10
-	tektonRunPattern    = `(?m)^(taskrun|pipelinerun)\.tekton\.dev/(\S+)\s+created$`
+	tektonRunPattern = `(?m)^(taskrun|pipelinerun)\.tekton\.dev/(\S+)\s+created$`
 )
+
+// TektonRun represents a Tekton TaskRun or PipelineRun
+type TektonRun struct {
+	Name string
+	Kind string
+}
 
 // ApplyStepActionYAML applies the Tekton StepAction YAML file to the kubernetes cluster
 func ApplyStepActionYAML(stepActionFilePath, namespace string) error {
@@ -39,27 +50,79 @@ func ApplyStepActionYAML(stepActionFilePath, namespace string) error {
 	return nil
 }
 
-// ApplyTestYAML applies the Test YAML file to the kubernetes cluster
-func ApplyTestYAML(testFilePath, namespace string) (TektonRun, error) {
+// ApplyTestYAML applies the Test YAML file to the kubernetes cluster and returns the Tekton TaskRun or PipelineRun
+func ApplyTestYAML(t *testing.T, testFilePath, namespace string) TektonRun {
+	t.Helper()
 	cmd := exec.Command("kubectl", "apply", "-f", testFilePath, "-n", namespace)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		return TektonRun{}, fmt.Errorf("failed to apply Test YAML file: %v\n%s", err, output)
+		t.Fatalf("failed to apply Test YAML file: %v\n%s", err, output)
 	}
-	return getTektonRun(string(output))
+	tektonRun, err := getTektonRun(string(output))
+	if err != nil {
+		t.Fatalf("failed to get Tekton Run: %v", err)
+	}
+	return tektonRun
 }
 
 // WaitForTektonRunCompletion waits for the Tekton TaskRun or PipelineRun to complete with the expected condition
-func WaitForTektonRunCompletion(ctx context.Context, tektonRunName, tektonRunKind, expectedCondition, namespace string) error {
-	resourceType := strings.ToLower(tektonRunKind) + "s"
+func WaitForTektonRunCompletion(t *testing.T, tektonClient *versioned.Clientset, tektonRun TektonRun, watchTimeoutMinutes int, expectedCondition, namespace string) {
+	t.Helper()
+	var watcher watch.Interface
+	var err error
+	timeoutSeconds := int64(watchTimeoutMinutes * 60)
 
-	timeout := watchTimeoutMinutes * time.Minute
-	cmd := exec.CommandContext(ctx, "kubectl", "wait", "--for=condition="+expectedCondition, fmt.Sprintf("--timeout=%s", timeout.String()), fmt.Sprintf("%s/%s", resourceType, tektonRunName), "-n", namespace)
-	if _, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("waiting for %s %s to reach condition %s: %v", tektonRunKind, tektonRunName, expectedCondition, err)
+	switch strings.ToLower(tektonRun.Kind) {
+	case "taskrun":
+		watcher, err = tektonClient.TektonV1().TaskRuns(namespace).Watch(context.TODO(), metav1.ListOptions{
+			FieldSelector:  fmt.Sprintf("metadata.name=%s", tektonRun.Name),
+			TimeoutSeconds: &timeoutSeconds,
+		})
+		if err != nil {
+			t.Fatalf("failed to start watch for TaskRun: %v", err)
+		}
+	case "pipelinerun":
+		watcher, err = tektonClient.TektonV1().PipelineRuns(namespace).Watch(context.TODO(), metav1.ListOptions{
+			FieldSelector:  fmt.Sprintf("metadata.name=%s", tektonRun.Name),
+			TimeoutSeconds: &timeoutSeconds,
+		})
+		if err != nil {
+			t.Fatalf("failed to start watch for PipelineRun: %v", err)
+		}
+	default:
+		t.Fatalf("unsupported Tekton Run kind: %s", tektonRun.Kind)
+	}
+	defer watcher.Stop()
+
+	for event := range watcher.ResultChan() {
+		switch event.Type {
+		case watch.Error:
+			t.Fatalf("watch error: %v", event.Object)
+		case watch.Modified, watch.Added:
+			switch run := event.Object.(type) {
+			case *v1.TaskRun:
+				if run.IsDone() && meetExpectedCondition(run.Status.Conditions, expectedCondition) {
+					return
+				}
+			case *v1.PipelineRun:
+				if run.IsDone() && meetExpectedCondition(run.Status.Conditions, expectedCondition) {
+					return
+				}
+			}
+		}
 	}
 
-	return nil
+	t.Fatalf("watch timed out after %d minutes", watchTimeoutMinutes)
+}
+
+// meetExpectedCondition checks if the Tekton TaskRun or PipelineRun meets the expected condition
+func meetExpectedCondition(conditions []apis.Condition, expectedCondition string) bool {
+	for _, cond := range conditions {
+		if string(cond.Type) == expectedCondition && cond.Status == "True" {
+			return true
+		}
+	}
+	return false
 }
 
 // getTektonRun extracts a single Tekton TaskRun or PipelineRun from the output
@@ -79,43 +142,22 @@ func getTektonRun(output string) (TektonRun, error) {
 	return TektonRun{}, fmt.Errorf("no TaskRun or PipelineRun found in the output")
 }
 
-// GetTektonRunYAML gets the YAML for the Tekton TaskRun or PipelineRun
-func GetTektonRunYAML(tektonRunName, tektonRunKind, namespace string) (string, error) {
-	resourceType := strings.ToLower(tektonRunKind) + "s"
-	cmd := exec.Command("kubectl", "get", fmt.Sprintf("%s/%s", resourceType, tektonRunName), "-n", namespace, "-o", "yaml")
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		return string(output), fmt.Errorf("failed to get Tekton Run YAML: %v\n%s", err, output)
-	}
-	return string(output), nil
-}
-
-// DeleteTektonYAML deletes the Tekton YAML file from the kubernetes cluster
-func DeleteTektonYAML(taskFilePath, namespace string) (string, error) {
-	cmd := exec.Command("kubectl", "delete", "-f", taskFilePath, "-n", namespace)
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		return string(output), fmt.Errorf("failed to delete Tekton YAML file: %v\n%s", err, output)
-	}
-	return string(output), nil
-}
-
-// CreateTestNamespace creates a namespace for testing in the kubernetes cluster
-func CreateTestNamespace(namespace string) (string, error) {
+// CreateNamespace creates a namespace for testing in the kubernetes cluster
+func CreateNamespace(namespace string) error {
 	cmd := exec.Command("kubectl", "create", "namespace", namespace)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		return string(output), fmt.Errorf("failed to create namespace: %v\n%s", err, output)
+		return fmt.Errorf("failed to create namespace: %v\n%s", err, output)
 	}
-	return string(output), nil
+	return nil
 }
 
-// DeleteNamespaceAndResources deletes the namespace and all resources in it
-func DeleteNamespaceAndResources(namespace string) (string, error) {
+// DeleteNamespace deletes the namespace and all resources in it
+func DeleteNamespace(namespace string) error {
 	cmd := exec.Command("kubectl", "delete", "namespace", namespace)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		return string(output), fmt.Errorf("failed to delete namespace: %v\n%s", err, output)
+		return fmt.Errorf("failed to delete namespace: %v\n%s", err, output)
 	}
-	return string(output), nil
+	return nil
 }

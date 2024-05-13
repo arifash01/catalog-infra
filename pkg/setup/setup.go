@@ -12,46 +12,76 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package setup provides utility functions for setting up and modifying stepaction and test files.
+// Package setup provides utility functions for setting up and tearing down tests.
 package setup
 
 import (
-	"fmt"
-	"os"
+	"path/filepath"
+	"testing"
 
 	"github.com/gcb-catalog-testing-bot/catalog-infra/pkg/resourcemanager"
 	"github.com/google/uuid"
+	"github.com/tektoncd/pipeline/pkg/client/clientset/versioned"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/tools/clientcmd"
+	"k8s.io/client-go/util/homedir"
 )
 
-// SetupTestEnvironment sets up a test environment and return the cleanup function to be called after the tests
-func SetupTestEnvironment(tektonYAMLPath string) (string, func(), error) {
-	fmt.Println("Setting up tests...")
+// SetupTest creates a temporary namespace for testing and returns the namespace name and a cleanup function.
+func SetupTest(t *testing.T, tektonYAMLPath string) (string, func()) {
+	t.Helper()
+	t.Log("setting up tests ...")
 
 	// Create a temporary namespace for testing
 	namespace := uuid.New().String()
-	output, err := resourcemanager.CreateTestNamespace(namespace)
-	if err != nil {
-		return "", nil, fmt.Errorf("failed to create namespace: %v\n%s", err, output)
+	if err := resourcemanager.CreateNamespace(namespace); err != nil {
+		t.Fatalf("failed to create namespace: %v", err)
 	}
-	fmt.Printf("Using namespace: %s\n", namespace)
+	t.Logf("using namespace: %s", namespace)
 
 	// Cleanup function
 	cleanup := func() {
-		fmt.Println("Tearing down tests...")
-		resourcemanager.DeleteNamespaceAndResources(namespace)
+		t.Helper()
+		t.Log("tearing down tests...")
+		if err := resourcemanager.DeleteNamespace(namespace); err != nil {
+			t.Fatalf("failed to delete namespace: %v", err)
+		}
 	}
 
 	// Apply StepAction YAML
-	if err = resourcemanager.ApplyStepActionYAML(tektonYAMLPath, namespace); err != nil {
-		cleanup()
-		return "", nil, fmt.Errorf("failed to apply Tekton YAML: %v\n%s", err, output)
+	if err := resourcemanager.ApplyStepActionYAML(tektonYAMLPath, namespace); err != nil {
+		t.Fatalf("failed to apply Tekton YAML: %v", err)
 	}
 
-	return namespace, cleanup, nil
+	return namespace, cleanup
 }
 
-// ExitWithCleanup calls the cleanup function and exits the program with the given exit code.
-func ExitWithCleanup(cleanup func(), exitCode int) {
-	cleanup()
-	os.Exit(exitCode)
+// InitK8sClient initializes a k8s client and a Tekton client.
+func InitK8sClient(t *testing.T, kubeConfigPath ...string) (*kubernetes.Clientset, *versioned.Clientset) {
+	t.Helper()
+	var kubeConfig string
+	// Check if a custom kubeConfigPath was provided
+	if len(kubeConfigPath) > 0 {
+		kubeConfig = kubeConfigPath[0]
+	} else {
+		kubeConfig = filepath.Join(homedir.HomeDir(), ".kube", "config")
+	}
+	t.Logf("using kubeconfig: %s", kubeConfig)
+
+	config, err := clientcmd.BuildConfigFromFlags("", kubeConfig)
+	if err != nil {
+		t.Fatalf("failed to create k8s config: %v", err)
+	}
+
+	k8sClientset, err := kubernetes.NewForConfig(config)
+	if err != nil {
+		t.Fatalf("failed to create k8s client: %v", err)
+	}
+
+	tektonClient, err := versioned.NewForConfig(config)
+	if err != nil {
+		t.Fatalf("failed to create Tekton client: %v", err)
+	}
+
+	return k8sClientset, tektonClient
 }
