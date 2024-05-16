@@ -35,13 +35,13 @@ func AssertStepResultNotEmpty(t *testing.T, tektonClient *versioned.Clientset, t
 	case "taskrun":
 		taskRun, err := tektonClient.TektonV1().TaskRuns(namespace).Get(context.TODO(), tektonRun.Name, metav1.GetOptions{})
 		if err != nil {
-			t.Fatalf("failed to get TaskRun: %v", err)
+			t.Errorf("failed to get TaskRun: %v", err)
 		}
 		steps = taskRun.Status.Steps
 	case "pipelinerun":
-		t.Fatal("PipelineRun not supported for verifying step-level results")
+		t.Error("PipelineRun not supported for verifying step-level results")
 	default:
-		t.Fatalf("unsupported Tekton Run kind: %s", tektonRun.Kind)
+		t.Errorf("unsupported Tekton Run kind: %s", tektonRun.Kind)
 	}
 
 	checkStepResults(t, steps, stepName, resultName)
@@ -72,11 +72,11 @@ func checkStepResults(t *testing.T, steps []v1.StepState, stepName, resultName s
 					return
 				}
 			default:
-				t.Fatalf("unsupported result type for '%s': %v", resultName, result.Type)
+				t.Errorf("unsupported result type for '%s': %v", resultName, result.Type)
 			}
 
-			t.Fatalf("Step result '%s' in step '%s' is empty", resultName, step.Name)
+			t.Errorf("Step result '%s' in step '%s' is empty", resultName, step.Name)
 		}
 	}
-	t.Fatalf("Step result '%s' not found in Step '%s'", resultName, stepName)
+	t.Errorf("Step result '%s' not found in Step '%s'", resultName, stepName)
 }
