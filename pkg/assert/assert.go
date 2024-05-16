@@ -27,7 +27,7 @@ import (
 )
 
 // AssertStepResultNotEmpty asserts that a step result in the Tekton TaskRun is not empty
-func AssertStepResultNotEmpty(t *testing.T, tektonClient *versioned.Clientset, tektonRun resourcemanager.TektonRun, resultName, namespace string) {
+func AssertStepResultNotEmpty(t *testing.T, tektonClient *versioned.Clientset, tektonRun resourcemanager.TektonRun, stepName, resultName, namespace string) {
 	t.Helper()
 	var steps []v1.StepState
 
@@ -44,13 +44,16 @@ func AssertStepResultNotEmpty(t *testing.T, tektonClient *versioned.Clientset, t
 		t.Fatalf("unsupported Tekton Run kind: %s", tektonRun.Kind)
 	}
 
-	checkStepResults(t, steps, resultName)
+	checkStepResults(t, steps, stepName, resultName)
 }
 
 // checkStepResults checks that a step result in the Tekton TaskRun is not empty
-func checkStepResults(t *testing.T, steps []v1.StepState, resultName string) {
+func checkStepResults(t *testing.T, steps []v1.StepState, stepName, resultName string) {
 	t.Helper()
 	for _, step := range steps {
+		if step.Name != stepName {
+			continue
+		}
 		for _, result := range step.Results {
 			if result.Name != resultName {
 				continue
@@ -75,5 +78,5 @@ func checkStepResults(t *testing.T, steps []v1.StepState, resultName string) {
 			t.Fatalf("Step result '%s' in step '%s' is empty", resultName, step.Name)
 		}
 	}
-	t.Fatalf("Step result '%s' not found in any step", resultName)
+	t.Fatalf("Step result '%s' not found in Step '%s'", resultName, stepName)
 }
