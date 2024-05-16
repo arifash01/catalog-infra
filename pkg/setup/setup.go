@@ -17,6 +17,7 @@ package setup
 
 import (
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/gcb-catalog-testing-bot/catalog-infra/pkg/resourcemanager"
@@ -24,6 +25,7 @@ import (
 	"github.com/tektoncd/pipeline/pkg/client/clientset/versioned"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"
+	"k8s.io/client-go/util/homedir"
 )
 
 // SetupTest creates a temporary namespace for testing and returns the namespace name and a cleanup function.
@@ -58,7 +60,11 @@ func SetupTest(t *testing.T, client *kubernetes.Clientset, tektonYAMLPath string
 // InitK8sClients initializes a k8s client and a Tekton client.
 func InitK8sClients(t *testing.T) (*kubernetes.Clientset, *versioned.Clientset) {
 	t.Helper()
-	var kubeConfig = os.Getenv("KUBECONFIG")
+	kubeConfig := os.Getenv("KUBECONFIG")
+
+	if kubeConfig == "" {
+		kubeConfig = filepath.Join(homedir.HomeDir(), ".kube", "config")
+	}
 
 	t.Logf("using kubeconfig: %s", kubeConfig)
 
