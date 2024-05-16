@@ -42,7 +42,6 @@ func SetupTest(t *testing.T, client *kubernetes.Clientset, tektonYAMLPath string
 
 	// Cleanup function
 	t.Cleanup(func() {
-		t.Helper()
 		t.Log("tearing down tests...")
 		if err := resourcemanager.DeleteNamespace(namespace); err != nil {
 			t.Fatalf("failed to delete namespace: %v", err)
