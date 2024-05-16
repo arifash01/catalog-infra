@@ -28,8 +28,8 @@ import (
 	"k8s.io/client-go/util/homedir"
 )
 
-// SetupTest creates a temporary namespace for testing and returns the namespace name and a cleanup function.
-func SetupTest(t *testing.T, client *kubernetes.Clientset, tektonYAMLPath string) (string, func()) {
+// SetupTest creates a temporary namespace for testing and returns the namespace name.
+func SetupTest(t *testing.T, client *kubernetes.Clientset, tektonYAMLPath string) string {
 	t.Helper()
 	t.Log("setting up tests ...")
 
@@ -41,20 +41,19 @@ func SetupTest(t *testing.T, client *kubernetes.Clientset, tektonYAMLPath string
 	t.Logf("using namespace: %s", namespace)
 
 	// Cleanup function
-	cleanup := func() {
-		t.Helper()
+	t.Cleanup(func() {
 		t.Log("tearing down tests...")
 		if err := resourcemanager.DeleteNamespace(namespace); err != nil {
 			t.Fatalf("failed to delete namespace: %v", err)
 		}
-	}
+	})
 
 	// Apply StepAction YAML
 	if err := resourcemanager.ApplyStepActionYAML(tektonYAMLPath, namespace); err != nil {
 		t.Fatalf("failed to apply Tekton YAML: %v", err)
 	}
 
-	return namespace, cleanup
+	return namespace
 }
 
 // InitK8sClients initializes a k8s client and a Tekton client.
