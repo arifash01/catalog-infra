@@ -100,6 +100,7 @@ func WaitForTektonRunCompletion(t *testing.T, tektonClient *versioned.Clientset,
 	for event := range watcher.ResultChan() {
 		switch event.Type {
 		case watch.Error:
+			fetchTektonRunLogs(t, tektonRun, namespace)
 			t.Fatalf("watch error: %v", event.Object)
 		case watch.Modified, watch.Added:
 			switch run := event.Object.(type) {
@@ -115,7 +116,20 @@ func WaitForTektonRunCompletion(t *testing.T, tektonClient *versioned.Clientset,
 		}
 	}
 
+	fetchTektonRunLogs(t, tektonRun, namespace)
 	t.Fatalf("watch timed out after %v", watchTimeout)
+}
+
+// fetchTektonRunLogs fetches the logs for the Tekton TaskRun or PipelineRun
+func fetchTektonRunLogs(t *testing.T, tektonRun TektonRun, namespace string) {
+	t.Helper()
+	podName := tektonRun.Name + "-pod"
+	cmd := exec.Command("kubectl", "logs", podName, "-n", namespace, "--all-containers")
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("failed to get logs for Tekton Run: %v\n%s", err, output)
+	}
+	t.Logf("Tekton Run logs:\n%s", output)
 }
 
 // meetExpectedCondition checks if the Tekton TaskRun or PipelineRun meets the expected condition
