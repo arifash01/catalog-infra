@@ -22,18 +22,22 @@ import (
 
 	"github.com/gcb-catalog-testing-bot/catalog-infra/pkg/resourcemanager"
 	v1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
-	"github.com/tektoncd/pipeline/pkg/client/clientset/versioned"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 // AssertStepResultNotEmpty asserts that a step result in the Tekton TaskRun is not empty
-func AssertStepResultNotEmpty(t *testing.T, tektonClient *versioned.Clientset, tektonRun resourcemanager.TektonRun, stepName, resultName, namespace string) {
+func AssertStepResultNotEmpty(t *testing.T, client resourcemanager.Clients, stepName, resultName, namespace string) {
 	t.Helper()
+	//Skip if runnign of V2
+	if (client.GcbV2){
+		t.Log("Can't assert result in V2, skipping...")
+		return
+	}
 	var steps []v1.StepState
 
-	switch strings.ToLower(tektonRun.Kind) {
+	switch strings.ToLower(client.TKN.Kind) {
 	case "taskrun":
-		taskRun, err := tektonClient.TektonV1().TaskRuns(namespace).Get(context.TODO(), tektonRun.Name, metav1.GetOptions{})
+		taskRun, err := client.TKN.TektonClient.TektonV1().TaskRuns(namespace).Get(context.TODO(), client.TKN.Name, metav1.GetOptions{})
 		if err != nil {
 			t.Errorf("failed to get TaskRun: %v", err)
 		}
@@ -41,7 +45,7 @@ func AssertStepResultNotEmpty(t *testing.T, tektonClient *versioned.Clientset, t
 	case "pipelinerun":
 		t.Error("PipelineRun not supported for verifying step-level results")
 	default:
-		t.Errorf("unsupported Tekton Run kind: %s", tektonRun.Kind)
+		t.Errorf("unsupported Tekton Run kind: %s", client.TKN.Kind)
 	}
 
 	checkStepResults(t, steps, stepName, resultName)

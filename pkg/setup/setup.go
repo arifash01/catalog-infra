@@ -29,13 +29,30 @@ import (
 )
 
 // SetupTest creates a temporary namespace for testing and returns the namespace name.
-func SetupTest(t *testing.T, client *kubernetes.Clientset, tektonYAMLPath string) string {
+func SetupTest(t *testing.T, client resourcemanager.Clients, tektonYAMLPath string) string {
 	t.Helper()
 	t.Log("setting up tests ...")
 
-	// Create a temporary namespace for testing
+	// Create a temporary namespace and id for testing (will be a tekton ns or v2 Id)
 	namespace := uuid.New().String()
-	if err := resourcemanager.CreateNamespace(namespace); err != nil {
+	id := namespace
+	
+	if err := resourcemanager.CreateBundle(tektonYAMLPath,id); err != nil {
+		t.Fatalf("failed to create bundle: %v", err)
+	}
+	// Cleanup function
+	t.Cleanup(func() {
+		if err := client.GCB.GcloudDeleteBundle(namespace); err != nil {
+			t.Fatalf("failed to delete bundle: %v", err)
+		}
+	})
+
+	//Skip if running on gcbV2
+	if (client.GcbV2){
+		return id
+	}
+
+	if err := client.TKN.CreateNamespace(namespace); err != nil {
 		t.Fatalf("failed to create namespace: %v", err)
 	}
 	t.Logf("using namespace: %s", namespace)
@@ -43,22 +60,26 @@ func SetupTest(t *testing.T, client *kubernetes.Clientset, tektonYAMLPath string
 	// Cleanup function
 	t.Cleanup(func() {
 		t.Log("tearing down tests...")
-		if err := resourcemanager.DeleteNamespace(namespace); err != nil {
+		if err := client.TKN.DeleteNamespace(namespace); err != nil {
 			t.Fatalf("failed to delete namespace: %v", err)
 		}
 	})
 
-	// Apply StepAction YAML
-	if err := resourcemanager.ApplyStepActionYAML(tektonYAMLPath, namespace); err != nil {
-		t.Fatalf("failed to apply Tekton YAML: %v", err)
-	}
-
 	return namespace
 }
 
-// InitK8sClients initializes a k8s client and a Tekton client.
-func InitK8sClients(t *testing.T) (*kubernetes.Clientset, *versioned.Clientset) {
+// InitClients initializes a clients.
+func InitClients(t *testing.T) (resourcemanager.Clients) {
 	t.Helper()
+
+	// If running on v2
+	if resourcemanager.GcbV2(t){
+		return resourcemanager.Clients{
+			GCB: resourcemanager.MyCloudBuildClient{},
+			GcbV2: resourcemanager.GcbV2(t),
+		}
+	}
+		
 	kubeConfig := os.Getenv("KUBECONFIG")
 
 	if kubeConfig == "" {
@@ -81,6 +102,11 @@ func InitK8sClients(t *testing.T) (*kubernetes.Clientset, *versioned.Clientset) 
 	if err != nil {
 		t.Fatalf("failed to create Tekton client: %v", err)
 	}
-
-	return k8sClientset, tektonClient
+	return resourcemanager.Clients{
+		TKN: resourcemanager.MyTektonClient{
+			K8sClientset: k8sClientset,
+			TektonClient: tektonClient,
+		},
+		GcbV2: resourcemanager.GcbV2(t),
+	}
 }

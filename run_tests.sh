@@ -22,6 +22,7 @@ kubectl config use-context minikube
 # Run tests (capturing exit code if tests fail to cleanup properly)
 set +e
 go test -v --timeout 30m -p 1 ./...
+go test -v --gcbV2 --timeout 30m -p 1 ./...
 exit_code=$?
 set -e
 
