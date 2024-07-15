@@ -19,22 +19,36 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	// "flag"
 
-	"github.com/gcb-catalog-testing-bot/catalog-infra/pkg/resourcemanager"
+	"github.com/arifash01/catalog-infra/pkg/resourcemanager"
 	"github.com/google/uuid"
 	"github.com/tektoncd/pipeline/pkg/client/clientset/versioned"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/util/homedir"
 )
+// var v2Ptr = flag.Bool("gcbV2", false, "Run on V2") // Define v2 Flag
 
 // SetupTest creates a temporary namespace for testing and returns the namespace name.
 func SetupTest(t *testing.T, client *kubernetes.Clientset, tektonYAMLPath string) string {
 	t.Helper()
+	// flag.Parse()
 	t.Log("setting up tests ...")
 
-	// Create a temporary namespace for testing
+	// Create a temporary namespace and id for testing (will be a tekton ns or v2 Id)
 	namespace := uuid.New().String()
+	id := namespace
+	
+	if err := resourcemanager.CreateBundle(tektonYAMLPath,id); err != nil {
+		t.Fatalf("failed to run Kustomization: %v", err)
+	}
+
+	//Skip if running on gcbV2
+	if (true){
+		return id
+	}
+
 	if err := resourcemanager.CreateNamespace(namespace); err != nil {
 		t.Fatalf("failed to create namespace: %v", err)
 	}
